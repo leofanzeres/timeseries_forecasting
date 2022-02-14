@@ -11,6 +11,7 @@ import torch.optim as optim
 sys.path.append('utils/')
 from prepareData import getWeatherData
 
+
 def main():
 
     #Step 1: DownloadData
@@ -22,7 +23,9 @@ def main():
     #Step 2: Define parameters
 
     segmentation = {'multivariate':False, 'split':0.8, 'validation_mode':False, 'segment_size':47, 'shuffle_data':True, 'overlap':0.0}
-    prediction_method = "rnn" # options: basic, linear, rnn, lstm, gru
+    prediction_method = "rnn" # options: rnn, lstm, gru
+    compare = {'basic':True, 'linear':True} # Set comparison method/s
+    plot_results = True
 
     # Neural network training params
     n_steps = 25
@@ -41,25 +44,15 @@ def main():
     weatherData['hour'] = weatherData.index
 
 
-    #Step 5: Normalize data
+    #Step 5: Normalize, segment and split data
 
     weather_df_norm =  normalize(weatherData)
+    segmented_data = segment_data(weather_df_norm, segmentation)
 
 
     #Step 6: Prepare/Train and execute prediction
 
-    if prediction_method == 'basic':
-        basic_assumption(weather_df_norm, segmentation=segmentation)
-    elif prediction_method == 'linear':
-        linear_regression(weather_df_norm, segmentation=segmentation)
-    elif prediction_method == 'rnn':
-        rnn(weather_df_norm, segmentation=segmentation, n_steps=n_steps, l_rate=l_rate, arquitecture='rnn')
-    elif prediction_method == 'lstm':
-        rnn(weather_df_norm, segmentation=segmentation, n_steps=n_steps, l_rate=l_rate, arquitecture='lstm')
-    elif prediction_method == 'gru':
-        rnn(weather_df_norm, segmentation=segmentation, n_steps=n_steps, l_rate=l_rate, arquitecture='gru')
-    else:
-        print("Set one of the following methods for prediction: basic, linear, rnn, lstm, gru")
+    train_test_model (segmented_data, prediction_method, compare, segmentation, n_steps, l_rate, plot_results)
 
 
 def normalize(df):
@@ -125,12 +118,12 @@ def segment_data(weather_df, segmentation):
     return X_train, X_test, Y_train, Y_test
 
 
-def basic_assumption(weather_df, segmentation):
+def basic_assumption(data, segmentation):
     """ Prediction method based in the stationarity assumption. Temperature in time t will be predicted as the same of time t-1.
     """
     print("\n\nBASIC ASSUMPTION -----------------------------------------------------\n")
     segmentation['multivariate'] = False # Only temperature is necessary
-    _, X_test, _, Y_test = segment_data(weather_df, segmentation)
+    _, X_test, _, Y_test = data
     X_test_last = np.zeros_like(Y_test)
     for idx,item in enumerate(X_test):
         X_test_last[idx] = item[-1]
@@ -138,10 +131,10 @@ def basic_assumption(weather_df, segmentation):
     print("Mean squared error: %.8f" % mean_squared_error(Y_test, X_test_last))
 
 
-def linear_regression(weather_df, segmentation, print_coef=False):
+def linear_regression(data, segmentation, print_coef=False):
     """ Least squares Linear Regression.
     """
-    X_train, X_test, Y_train, Y_test = segment_data(weather_df, segmentation)
+    X_train, X_test, Y_train, Y_test = data
     if segmentation['multivariate']:
         X_train, X_test = X_train.reshape(X_train.shape[0], np.prod(X_train.shape[1:])), X_test.reshape(X_test.shape[0], np.prod(X_test.shape[1:]))
     print("\n\nLINEAR REGRESSION -----------------------------------------------------\n")
@@ -158,13 +151,13 @@ def linear_regression(weather_df, segmentation, print_coef=False):
     print("Mean squared error: %.8f" % mean_squared_error(Y_test, Y_pred))
 
 
-def rnn (weather_df, n_steps, segmentation, l_rate, arquitecture='rnn', print_train=False):
-    """ Implementation of the following recurrent neural networks (RNN) architectures:
+def rnn (data, n_steps, segmentation, l_rate, arquitecture='rnn', print_train=False):
+    """ Implementation of the following recurrent neural network (RNN) architectures:
             - Basic RNN
             - Gated recurrent unit (GRU) RNN
             - Long short-term memory (LSTM) RNN
     """
-    X_train, X_test, Y_train, Y_test = segment_data(weather_df, segmentation)
+    X_train, X_test, Y_train, Y_test = data
     X_train = torch.from_numpy(X_train).float()
     X_test = torch.from_numpy(X_test).float()
     Y_train = torch.from_numpy(Y_train).float()
@@ -266,5 +259,26 @@ def rnn (weather_df, n_steps, segmentation, l_rate, arquitecture='rnn', print_tr
             print("\nTest loss: %.8f" % loss.item())
 
 
+def train_test_model (weather_df_norm, prediction_method, compare, segmentation, n_steps, l_rate, plot_results):
+
+    if compare['basic']: basic_assumption(weather_df_norm, segmentation=segmentation)
+
+    if compare['linear']: linear_regression(weather_df_norm, segmentation=segmentation)
+
+    if prediction_method == 'rnn':
+        rnn(weather_df_norm, segmentation=segmentation, n_steps=n_steps, l_rate=l_rate, arquitecture='rnn')
+    elif prediction_method == 'lstm':
+        rnn(weather_df_norm, segmentation=segmentation, n_steps=n_steps, l_rate=l_rate, arquitecture='lstm')
+    elif prediction_method == 'gru':
+        rnn(weather_df_norm, segmentation=segmentation, n_steps=n_steps, l_rate=l_rate, arquitecture='gru')
+    else:
+        print("Set one of the following methods for prediction: basic, linear, rnn, lstm, gru")
+
+
+def plot_results (results):
+    results = []
+
+
 if __name__=='__main__':
     main()
+
