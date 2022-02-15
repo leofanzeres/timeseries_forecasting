@@ -22,7 +22,7 @@ def main():
 
     #Step 2: Define parameters
 
-    segmentation = {'multivariate':False, 'split':0.8, 'validation_mode':False, 'segment_size':47, 'shuffle_data':True, 'overlap':0.0}
+    segmentation = {'multivariate':True, 'split':0.8, 'validation_mode':False, 'segment_size':47, 'shuffle_data':True, 'overlap':0.0}
     prediction_method = "rnn" # options: rnn, lstm, gru
     compare = {'basic':True, 'linear':True} # Set comparison method/s
     plot_results = True
@@ -38,25 +38,28 @@ def main():
     print(weatherData.isnull().sum())
 
 
-    #Step 4: Format columns
 
-    weatherData['time'] = pd.to_datetime(weatherData['time'].str[:19])
-    weatherData['hour'] = weatherData.index # Create column for absolute hour information
-
-
-    #Step 5: Prepare data / Load data previously prepared
+    #Step 4: Prepare data / Load data previously prepared
     """ Ideally, data should be prepared once and then saved.
     """
-    load_prepared_arrays = True
 
-    files_path = {'X_train':'data/X_train.npy', 'X_valid':'data/X_valid.npy', 'X_test':'data/X_test.npy',
-                  'Y_train':'data/Y_train.npy', 'Y_valid':'data/Y_valid.npy', 'Y_test':'data/Y_test.npy'}
+
+    load_prepared_arrays = False
+
+    if segmentation['multivariate']:
+        files_path = {'X_train':'data/X_train_m.npy', 'X_valid':'data/X_valid_m.npy', 'X_test':'data/X_test_m.npy',
+                      'Y_train':'data/Y_train_m.npy', 'Y_valid':'data/Y_valid_m.npy', 'Y_test':'data/Y_test_m.npy'}
+    else:
+        files_path = {'X_train':'data/X_train.npy', 'X_valid':'data/X_valid.npy', 'X_test':'data/X_test.npy',
+                      'Y_train':'data/Y_train.npy', 'Y_valid':'data/Y_valid.npy', 'Y_test':'data/Y_test.npy'}
 
     if load_prepared_arrays:
-        prepared_data = load_numpy_arrays (files_path, segmentation['validation_mode'])
+        prepared_data = load_numpy_arrays (files_path=files_path, validation_mode=segmentation['validation_mode'])
     else:
+        weatherData['time'] = pd.to_datetime(weatherData['time'].str[:19]) # Format columns
+        weatherData['hour'] = weatherData.index # Create column for absolute hour information
         weather_df_norm = normalize(weatherData) # Normalize
-        prepared_data = prepare_data(weather_df_norm, segmentation, save_data=True) # Segment and split data
+        prepared_data = prepare_data(weather_df=weather_df_norm, segmentation=segmentation, save_data=True, files_path=files_path) # Segment and split data
 
 
     #Step 6: Prepare/Train and execute prediction
@@ -153,11 +156,13 @@ def basic_assumption(data, segmentation):
     """ Prediction method based in the stationarity assumption. Temperature in time t will be predicted as the same of time t-1.
     """
     print("\n\nBASIC ASSUMPTION -----------------------------------------------------\n")
-    segmentation['multivariate'] = False # Only temperature is necessary
     _, X_test, _, Y_test = data
     X_test_last = np.zeros_like(Y_test)
     for idx,item in enumerate(X_test):
-        X_test_last[idx] = item[-1]
+        if segmentation['multivariate']:
+            X_test_last[idx] = item[-1][0]
+        else:
+            X_test_last[idx] = item[-1]
     # MSE
     mse = mean_squared_error(Y_test, X_test_last)
     print("Mean squared error: %.8f" % mse)
@@ -303,20 +308,20 @@ def rnn (data, n_steps, segmentation, l_rate, arquitecture='rnn', print_train=Fa
     return train_loss, test_loss
 
 
-def train_test_model (weather_df_norm, prediction_method, compare, segmentation, n_steps, l_rate, plot_results):
+def train_test_model (data, prediction_method, compare, segmentation, n_steps, l_rate, plot_results):
 
     prediction_results = []
 
-    if compare['basic']: error_basic = basic_assumption(weather_df_norm, segmentation=segmentation)
+    if compare['basic']: error_basic = basic_assumption(data, segmentation=segmentation)
 
-    if compare['linear']: error_linear = linear_regression(weather_df_norm, segmentation=segmentation)
+    if compare['linear']: error_linear = linear_regression(data, segmentation=segmentation)
 
     if prediction_method == 'rnn':
-        train_loss, test_loss = rnn(weather_df_norm, segmentation=segmentation, n_steps=n_steps, l_rate=l_rate, arquitecture='rnn')
+        train_loss, test_loss = rnn(data, segmentation=segmentation, n_steps=n_steps, l_rate=l_rate, arquitecture='rnn')
     elif prediction_method == 'lstm':
-        train_loss, test_loss = rnn(weather_df_norm, segmentation=segmentation, n_steps=n_steps, l_rate=l_rate, arquitecture='lstm')
+        train_loss, test_loss = rnn(data, segmentation=segmentation, n_steps=n_steps, l_rate=l_rate, arquitecture='lstm')
     elif prediction_method == 'gru':
-        train_loss, test_loss = rnn(weather_df_norm, segmentation=segmentation, n_steps=n_steps, l_rate=l_rate, arquitecture='gru')
+        train_loss, test_loss = rnn(data, segmentation=segmentation, n_steps=n_steps, l_rate=l_rate, arquitecture='gru')
     else:
         print("Set one of the following methods for prediction: basic, linear, rnn, lstm, gru")
 
