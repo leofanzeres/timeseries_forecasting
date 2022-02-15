@@ -28,7 +28,7 @@ def main():
     plot_results = True
 
     # Neural network training params
-    n_steps = 20
+    n_steps = 25
     l_rate = 0.05
 
 
@@ -49,16 +49,14 @@ def main():
     """
     load_prepared_arrays = True
 
-    if segmentation['validation_mode']:
-        files_name = ('X_train.npy', 'X_valid.npy', 'Y_train.npy', 'Y_valid.npy')
-    else:
-        files_name = ('X_train.npy', 'X_test.npy', 'Y_train.npy', 'Y_test.npy')
+    files_path = {'X_train':'data/X_train.npy', 'X_valid':'data/X_valid.npy', 'X_test':'data/X_test.npy',
+                  'Y_train':'data/Y_train.npy', 'Y_valid':'data/Y_valid.npy', 'Y_test':'data/Y_test.npy'}
 
     if load_prepared_arrays:
-        prepared_data = load_numpy_arrays (files_name, segmentation['validation_mode'])
+        prepared_data = load_numpy_arrays (files_path, segmentation['validation_mode'])
     else:
         weather_df_norm = normalize(weatherData) # Normalize
-        prepared_data = prepare_data(weather_df_norm, segmentation, True) # Segment and split data
+        prepared_data = prepare_data(weather_df_norm, segmentation, save_data=True) # Segment and split data
 
 
     #Step 6: Prepare/Train and execute prediction
@@ -78,7 +76,7 @@ def normalize(df):
     return df_norm
 
 
-def prepare_data(weather_df, segmentation, save_data):
+def prepare_data(weather_df, segmentation, save_data, files_path):
     """ Splits dataset and segments time series.
     """
     print("\n\nSPLITTING AND SEGMENTING DATA -----------------------------------------------------")
@@ -122,28 +120,28 @@ def prepare_data(weather_df, segmentation, save_data):
     print("# samples for test: ", len(X_test))
 
     if save_data:
-        np.save('X_train.npy', X_train)
-        np.save('X_valid.npy', X_valid)
-        np.save('X_test.npy', X_test)
-        np.save('Y_train.npy', Y_train)
-        np.save('Y_valid.npy', Y_valid)
-        np.save('Y_test.npy', Y_test)
+        np.save(files_path['X_train'], X_train)
+        np.save(files_path['X_valid'], X_valid)
+        np.save(files_path['X_test'], X_test)
+        np.save(files_path['Y_train'], Y_train)
+        np.save(files_path['Y_valid'], Y_valid)
+        np.save(files_path['Y_test'], Y_test)
 
     return X_train, X_test, Y_train, Y_test
 
 
-def load_numpy_arrays (files_name, validation_mode):
+def load_numpy_arrays (files_path, validation_mode):
     print("\n\nLOADING DATA -----------------------------------------------------")
     if validation_mode:
-        X_train = np.load('X_train.npy')
-        X_test = np.load('X_valid.npy')
-        Y_train = np.load('Y_train.npy')
-        Y_test = np.load('Y_valid.npy')
+        X_train = np.load(files_path['X_train'])
+        X_test = np.load(files_path['X_valid'])
+        Y_train = np.load(files_path['Y_train'])
+        Y_test = np.load(files_path['Y_valid'])
     else:
-        X_train = np.load('X_train.npy')
-        X_test = np.load('X_test.npy')
-        Y_train = np.load('Y_train.npy')
-        Y_test = np.load('Y_test.npy')
+        X_train = np.load(files_path['X_train'])
+        X_test = np.load(files_path['X_test'])
+        Y_train = np.load(files_path['Y_train'])
+        Y_test = np.load(files_path['Y_test'])
 
     print("# samples for training: ", len(X_train))
     print("# samples for test: ", len(X_test))
@@ -340,8 +338,8 @@ def plot_graph(prediction_results, prediction_method, n_steps):
             x_axis.append(0)
     test_loss = test_loss_large
     x_length = len(prediction_results[2])
-    plt.plot((error_basic,)*x_length, label='basic')
-    plt.plot((error_linear,)*x_length, label='linear')
+    plt.plot((error_basic,)*x_length, label='Basic assumption')
+    plt.plot((error_linear,)*x_length, label='Linear regression')
     plt.plot(train_loss, label=prediction_method.upper()+' train')
     plt.plot(test_loss, label=prediction_method.upper()+' test', marker='.')
     plt.xlabel('epochs')
