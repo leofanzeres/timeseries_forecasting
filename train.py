@@ -28,7 +28,7 @@ def main():
     plot_results = True
 
     # Neural network training params
-    n_steps = 25
+    n_steps = 20
     l_rate = 0.05
 
 
@@ -38,21 +38,32 @@ def main():
     print(weatherData.isnull().sum())
 
 
-    #Step 4: Create column for hour information
+    #Step 4: Format columns
 
     weatherData['time'] = pd.to_datetime(weatherData['time'].str[:19])
-    weatherData['hour'] = weatherData.index
+    weatherData['hour'] = weatherData.index # Create column for absolute hour information
 
 
-    #Step 5: Normalize, segment and split data
+    #Step 5: Prepare data / Load data previously prepared
+    """ Ideally, data should be prepared once and then saved.
+    """
+    load_prepared_arrays = True
 
-    weather_df_norm =  normalize(weatherData)
-    segmented_data = segment_data(weather_df_norm, segmentation)
+    if segmentation['validation_mode']:
+        files_name = ('X_train.npy', 'X_valid.npy', 'Y_train.npy', 'Y_valid.npy')
+    else:
+        files_name = ('X_train.npy', 'X_test.npy', 'Y_train.npy', 'Y_test.npy')
+
+    if load_prepared_arrays:
+        prepared_data = load_numpy_arrays (files_name, segmentation['validation_mode'])
+    else:
+        weather_df_norm = normalize(weatherData) # Normalize
+        prepared_data = prepare_data(weather_df_norm, segmentation, True) # Segment and split data
 
 
     #Step 6: Prepare/Train and execute prediction
 
-    train_test_model (segmented_data, prediction_method, compare, segmentation, n_steps, l_rate, plot_results)
+    train_test_model (prepared_data, prediction_method, compare, segmentation, n_steps, l_rate, plot_results)
 
 
 def normalize(df):
@@ -67,7 +78,7 @@ def normalize(df):
     return df_norm
 
 
-def segment_data(weather_df, segmentation):
+def prepare_data(weather_df, segmentation, save_data):
     """ Splits dataset and segments time series.
     """
     print("\n\nSPLITTING AND SEGMENTING DATA -----------------------------------------------------")
@@ -75,7 +86,6 @@ def segment_data(weather_df, segmentation):
     overlap if overlap >= 0.0 else 0.0
     segment_shift = segment_size - round(segment_size * overlap) + 1
     ts_size = len(weather_df)
-
 
     # Segment time series
     data = weather_df.loc[:][['temperature','pressure','humidity','hour']]
@@ -111,9 +121,32 @@ def segment_data(weather_df, segmentation):
     print("# samples for validation: ", len(X_valid))
     print("# samples for test: ", len(X_test))
 
+    if save_data:
+        np.save('X_train.npy', X_train)
+        np.save('X_valid.npy', X_valid)
+        np.save('X_test.npy', X_test)
+        np.save('Y_train.npy', Y_train)
+        np.save('Y_valid.npy', Y_valid)
+        np.save('Y_test.npy', Y_test)
+
+    return X_train, X_test, Y_train, Y_test
+
+
+def load_numpy_arrays (files_name, validation_mode):
+    print("\n\nLOADING DATA -----------------------------------------------------")
     if validation_mode:
-        X_test = X_valid
-        Y_test = Y_valid
+        X_train = np.load('X_train.npy')
+        X_test = np.load('X_valid.npy')
+        Y_train = np.load('Y_train.npy')
+        Y_test = np.load('Y_valid.npy')
+    else:
+        X_train = np.load('X_train.npy')
+        X_test = np.load('X_test.npy')
+        Y_train = np.load('Y_train.npy')
+        Y_test = np.load('Y_test.npy')
+
+    print("# samples for training: ", len(X_train))
+    print("# samples for test: ", len(X_test))
 
     return X_train, X_test, Y_train, Y_test
 
@@ -128,7 +161,10 @@ def basic_assumption(data, segmentation):
     for idx,item in enumerate(X_test):
         X_test_last[idx] = item[-1]
     # MSE
-    print("Mean squared error: %.8f" % mean_squared_error(Y_test, X_test_last))
+    mse = mean_squared_error(Y_test, X_test_last)
+    print("Mean squared error: %.8f" % mse)
+
+    return mse
 
 
 def linear_regression(data, segmentation, print_coef=False):
@@ -148,7 +184,10 @@ def linear_regression(data, segmentation, print_coef=False):
     # Coefficients
     if print_coef: print("Coefficients: ", lreg.coef_)
     # MSE
-    print("Mean squared error: %.8f" % mean_squared_error(Y_test, Y_pred))
+    mse = mean_squared_error(Y_test, Y_pred)
+    print("Mean squared error: %.8f" % mse)
+
+    return mse
 
 
 def rnn (data, n_steps, segmentation, l_rate, arquitecture='rnn', print_train=False):
@@ -162,6 +201,9 @@ def rnn (data, n_steps, segmentation, l_rate, arquitecture='rnn', print_train=Fa
     X_test = torch.from_numpy(X_test).float()
     Y_train = torch.from_numpy(Y_train).float()
     Y_test = torch.from_numpy(Y_test).float()
+
+    train_loss = []
+    test_loss = []
 
     if arquitecture=='rnn' or arquitecture=='gru':
         print("\n\n"+arquitecture.upper()+" -----------------------------------------------------\n")
@@ -240,6 +282,7 @@ def rnn (data, n_steps, segmentation, l_rate, arquitecture='rnn', print_train=Fa
                 out = model(X_train)
             out = out[-1] # Only use last output
             loss = criterion(out, Y_train)
+            train_loss.append(loss.item())
             if print_train:
                 print("Train loss: %.8f" % loss.item())
             else:
@@ -256,27 +299,58 @@ def rnn (data, n_steps, segmentation, l_rate, arquitecture='rnn', print_train=Fa
                 pred = model(X_test)
             pred = pred[-1] # Only use last output
             loss = criterion(pred, Y_test)
+            test_loss.append(loss.item())
             print("\nTest loss: %.8f" % loss.item())
+
+    return train_loss, test_loss
 
 
 def train_test_model (weather_df_norm, prediction_method, compare, segmentation, n_steps, l_rate, plot_results):
 
-    if compare['basic']: basic_assumption(weather_df_norm, segmentation=segmentation)
+    prediction_results = []
 
-    if compare['linear']: linear_regression(weather_df_norm, segmentation=segmentation)
+    if compare['basic']: error_basic = basic_assumption(weather_df_norm, segmentation=segmentation)
+
+    if compare['linear']: error_linear = linear_regression(weather_df_norm, segmentation=segmentation)
 
     if prediction_method == 'rnn':
-        rnn(weather_df_norm, segmentation=segmentation, n_steps=n_steps, l_rate=l_rate, arquitecture='rnn')
+        train_loss, test_loss = rnn(weather_df_norm, segmentation=segmentation, n_steps=n_steps, l_rate=l_rate, arquitecture='rnn')
     elif prediction_method == 'lstm':
-        rnn(weather_df_norm, segmentation=segmentation, n_steps=n_steps, l_rate=l_rate, arquitecture='lstm')
+        train_loss, test_loss = rnn(weather_df_norm, segmentation=segmentation, n_steps=n_steps, l_rate=l_rate, arquitecture='lstm')
     elif prediction_method == 'gru':
-        rnn(weather_df_norm, segmentation=segmentation, n_steps=n_steps, l_rate=l_rate, arquitecture='gru')
+        train_loss, test_loss = rnn(weather_df_norm, segmentation=segmentation, n_steps=n_steps, l_rate=l_rate, arquitecture='gru')
     else:
         print("Set one of the following methods for prediction: basic, linear, rnn, lstm, gru")
 
+    prediction_results = error_basic, error_linear, train_loss, test_loss
+    if plot_results: plot_graph(prediction_results, prediction_method, n_steps)
 
-def plot_results (results):
-    results = []
+
+def plot_graph(prediction_results, prediction_method, n_steps):
+    error_basic, error_linear, train_loss, test_loss = prediction_results[0], prediction_results[1], prediction_results[2], prediction_results[3]
+    test_loss_large = []
+    x_axis = []
+    dim = len(train_loss)/len(test_loss) # Original dimension of RNN hidden layer
+    for i in range(len(train_loss)):
+        if (i+1) % dim == 0:
+            test_loss_large.append(test_loss[int(i/dim)])
+            x_axis.append(int((i+1) / dim))
+        else:
+            test_loss_large.append(None)
+            x_axis.append(0)
+    test_loss = test_loss_large
+    x_length = len(prediction_results[2])
+    plt.plot((error_basic,)*x_length, label='basic')
+    plt.plot((error_linear,)*x_length, label='linear')
+    plt.plot(train_loss, label=prediction_method.upper()+' train')
+    plt.plot(test_loss, label=prediction_method.upper()+' test', marker='.')
+    plt.xlabel('epochs')
+    plt.ylabel('mean squared error')
+    plt.ylim(0, 0.0005)
+    plt.xticks(np.arange(0,x_length+dim,dim), np.arange(n_steps+1))
+    plt.title("Prediction Plot")
+    plt.legend()
+    plt.show()
 
 
 if __name__=='__main__':
