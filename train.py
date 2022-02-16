@@ -130,7 +130,10 @@ def prepare_data(weather_df, segmentation, save_data, files_path):
         np.save(files_path['Y_valid'], Y_valid)
         np.save(files_path['Y_test'], Y_test)
 
-    return X_train, X_test, Y_train, Y_test
+    if validation_mode:
+        return X_train, X_valid, Y_train, Y_valid
+    else:
+        return X_train, X_test, Y_train, Y_test
 
 
 def load_numpy_arrays (files_path, validation_mode):
