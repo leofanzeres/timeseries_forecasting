@@ -22,14 +22,14 @@ def main():
 
     #Step 2: Define parameters
 
-    segmentation = {'multivariate':True, 'split':0.8, 'validation_mode':False, 'segment_size':47, 'shuffle_data':True, 'overlap':0.0}
-    prediction_method = "rnn" # options: rnn, lstm, gru
+    segmentation = {'multivariate':True, 'split':0.8, 'validation_mode':False, 'segment_size':46, 'shuffle_data':True, 'overlap':0.0}
+    prediction_method = "lstm" # options: rnn, lstm, gru
     compare = {'basic':True, 'linear':True} # Set comparison method/s
     plot_results = True
 
     # Neural network training params
-    n_steps = 25
-    l_rate = 0.05
+    n_steps = 50
+    l_rate = 0.1
 
 
     #Step 3: Check if there are missing values
@@ -44,7 +44,7 @@ def main():
     """
 
 
-    load_prepared_arrays = False
+    load_prepared_arrays = True
 
     if segmentation['multivariate']:
         files_path = {'X_train':'data/X_train_m.npy', 'X_valid':'data/X_valid_m.npy', 'X_test':'data/X_test_m.npy',
@@ -56,8 +56,7 @@ def main():
     if load_prepared_arrays:
         prepared_data = load_numpy_arrays (files_path=files_path, validation_mode=segmentation['validation_mode'])
     else:
-        weatherData['time'] = pd.to_datetime(weatherData['time'].str[:19]) # Format columns
-        weatherData['hour'] = weatherData.index # Create column for absolute hour information
+        weatherData['time'] = pd.to_datetime(weatherData['time'].str[:19]) # Format time column
         weather_df_norm = normalize(weatherData) # Normalize
         prepared_data = prepare_data(weather_df=weather_df_norm, segmentation=segmentation, save_data=True, files_path=files_path) # Segment and split data
 
@@ -89,7 +88,7 @@ def prepare_data(weather_df, segmentation, save_data, files_path):
     ts_size = len(weather_df)
 
     # Segment time series
-    data = weather_df.loc[:][['temperature','pressure','humidity','hour']]
+    data = weather_df.loc[:][['temperature','pressure','humidity']]
     X_data, Y_data = [], []
     remain_size = ts_size
     while remain_size >= segment_size:
@@ -240,14 +239,13 @@ def rnn (data, n_steps, segmentation, l_rate, arquitecture='rnn', print_train=Fa
     elif arquitecture=='lstm':
         print("\n\nLSTM -----------------------------------------------------\n")
         class LSTMModel(nn.Module):
-            def __init__(self, n_hidden=20, n_layers=1, n_cells=1):
+            def __init__(self, n_hidden=20, n_cells=1):
                 super(LSTMModel, self).__init__()
                 self.n_hidden = n_hidden
-                self.n_layers = n_layers
                 self.n_cells = n_cells
-                self.lstm1 = nn.LSTMCell(1,self.n_hidden, self.n_layers)
+                self.lstm1 = nn.LSTMCell(1,self.n_hidden)
                 if self.n_cells > 1:
-                    self.lstm2 = nn.LSTMCell(self.n_hidden,self.n_hidden, self.n_layers)
+                    self.lstm2 = nn.LSTMCell(self.n_hidden,self.n_hidden)
                 self.linear = nn.Linear(self.n_hidden,1)
 
             def forward(self, x):
@@ -349,14 +347,17 @@ def plot_graph(prediction_results, prediction_method, n_steps):
     plt.plot((error_basic,)*x_length, label='Basic assumption')
     plt.plot((error_linear,)*x_length, label='Linear regression')
     plt.plot(train_loss, label=prediction_method.upper()+' train')
-    plt.plot(test_loss, label=prediction_method.upper()+' test', marker='.')
+    plt.plot(test_loss, label=prediction_method.upper()+' test', marker='o', markersize=4)
     plt.xlabel('epochs')
     plt.ylabel('mean squared error')
     plt.ylim(0, 0.0005)
+    plt.rc('xtick',labelsize=8)
+    plt.rc('ytick',labelsize=8)
     plt.xticks(np.arange(0,x_length+dim,dim), np.arange(n_steps+1))
     plt.title("Prediction Plot")
     plt.legend()
-    plt.show()
+    #plt.show()
+    plt.savefig('predict.png')
 
 
 if __name__=='__main__':
