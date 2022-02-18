@@ -22,14 +22,14 @@ def main():
 
     #Step 2: Define parameters
 
-    segmentation = {'multivariate':True, 'split':0.8, 'validation_mode':False, 'segment_size':46, 'shuffle_data':True, 'overlap':0.0}
-    prediction_method = "lstm" # options: rnn, lstm, gru
+    segmentation = {'multivariate':False, 'split':0.8, 'validation_mode':False, 'segment_size':10, 'shuffle_data':True, 'overlap':0.0}
+    prediction_method = "rnn" # options: rnn, lstm, gru
     compare = {'basic':True, 'linear':True} # Set comparison method/s
     plot_results = True
 
     # Neural network training params
-    n_steps = 50
-    l_rate = 0.1
+    n_steps = 20
+    l_rate = 0.05
 
 
     #Step 3: Check if there are missing values
@@ -232,7 +232,8 @@ def rnn (data, n_steps, segmentation, l_rate, arquitecture='rnn', print_train=Fa
                     input_t = input_t.unsqueeze(-1)
                     out_t, h_t = self.rnn(input_t, h_t)
                     output = self.linear(out_t).squeeze(1)
-                    outputs.append(output)
+                    outputs += [output]
+                outputs = torch.stack(outputs, 1).squeeze(2)
                 return outputs
         model = RNNModel()
 
@@ -263,7 +264,8 @@ def rnn (data, n_steps, segmentation, l_rate, arquitecture='rnn', print_train=Fa
                         output = self.linear(h_t2)
                     else:
                         output = self.linear(h_t)
-                    outputs.append(output)
+                    outputs += [output]
+                outputs = torch.stack(outputs, 1).squeeze(2)
                 return outputs
         model = LSTMModel()
 
@@ -284,7 +286,8 @@ def rnn (data, n_steps, segmentation, l_rate, arquitecture='rnn', print_train=Fa
                 out = model(input)
             else:
                 out = model(X_train)
-            out = out[-1] # Only use last output
+            out = out[:,-1] # Only use last output
+            out = torch.reshape(out, (out.size(0),1)) # Only use last output
             loss = criterion(out, Y_train)
             train_loss.append(loss.item())
             if print_train:
@@ -301,7 +304,8 @@ def rnn (data, n_steps, segmentation, l_rate, arquitecture='rnn', print_train=Fa
                 pred = model(input)
             else:
                 pred = model(X_test)
-            pred = pred[-1] # Only use last output
+            pred = pred[:,-1] # Only use last output
+            pred = torch.reshape(pred, (pred.size(0),1))
             loss = criterion(pred, Y_test)
             test_loss.append(loss.item())
             print("\nTest loss: %.8f" % loss.item())
@@ -350,11 +354,11 @@ def plot_graph(prediction_results, prediction_method, n_steps):
     plt.plot(test_loss, label=prediction_method.upper()+' test', marker='o', markersize=4)
     plt.xlabel('epochs')
     plt.ylabel('mean squared error')
-    plt.ylim(0, 0.0005)
+    plt.ylim(0, 0.001)
     plt.rc('xtick',labelsize=8)
     plt.rc('ytick',labelsize=8)
     plt.xticks(np.arange(0,x_length+dim,dim), np.arange(n_steps+1))
-    plt.title("Prediction Plot")
+    plt.title("Prediction Loss")
     plt.legend()
     #plt.show()
     plt.savefig('predict.png')
@@ -362,4 +366,3 @@ def plot_graph(prediction_results, prediction_method, n_steps):
 
 if __name__=='__main__':
     main()
-
