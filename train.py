@@ -23,11 +23,10 @@ def main():
     #Step 2: Define parameters
 
     segmentation = {'multivariate':False, 'split':0.8, 'validation_mode':False, 'segment_size':10, 'shuffle_data':True, 'overlap':0.0}
-    prediction_method = "rnn" # options: rnn, lstm, gru
     compare = {'basic':True, 'linear':True} # Set comparison method/s
     plot_results = True
-
-    # Neural network training params
+    # Neural network training params:
+    prediction_method = "rnn" # options: rnn, lstm, gru
     n_steps = 20
     l_rate = 0.05
 
@@ -38,12 +37,9 @@ def main():
     print(weatherData.isnull().sum())
 
 
-
     #Step 4: Prepare data / Load data previously prepared
     """ Ideally, data should be prepared once and then saved.
     """
-
-
     load_prepared_arrays = True
 
     if segmentation['multivariate']:
@@ -52,7 +48,6 @@ def main():
     else:
         files_path = {'X_train':'data/X_train.npy', 'X_valid':'data/X_valid.npy', 'X_test':'data/X_test.npy',
                       'Y_train':'data/Y_train.npy', 'Y_valid':'data/Y_valid.npy', 'Y_test':'data/Y_test.npy'}
-
     if load_prepared_arrays:
         prepared_data = load_numpy_arrays (files_path=files_path, validation_mode=segmentation['validation_mode'])
     else:
@@ -61,7 +56,7 @@ def main():
         prepared_data = prepare_data(weather_df=weather_df_norm, segmentation=segmentation, save_data=True, files_path=files_path) # Segment and split data
 
 
-    #Step 6: Prepare/Train and execute prediction
+    #Step 5: Prepare/Train and execute prediction
 
     train_test_model (prepared_data, prediction_method, compare, segmentation, n_steps, l_rate, plot_results)
 
