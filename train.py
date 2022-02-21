@@ -24,7 +24,10 @@ def main():
 
     segmentation = {'multivariate':False, 'split':0.8, 'validation_mode':False, 'segment_size':10, 'shuffle_data':True, 'overlap':0.0}
     compare = {'basic':True, 'linear':True} # Set comparison method/s
+    weather_data_limits = (0,len(weatherData)) # for entire dataset, define (0,len(weatherData))
     plot_results = True
+    load_prepared_arrays = True
+
     # Neural network training params:
     prediction_method = "rnn" # options: rnn, lstm, gru
     n_steps = 20
@@ -40,25 +43,32 @@ def main():
     #Step 4: Prepare data / Load data previously prepared
     """ Ideally, data should be prepared once and then saved.
     """
-    load_prepared_arrays = True
+
+    folder = 'data_segment_size_'+str(segmentation['segment_size'])+'/'
 
     if segmentation['multivariate']:
-        files_path = {'X_train':'data/X_train_m.npy', 'X_valid':'data/X_valid_m.npy', 'X_test':'data/X_test_m.npy',
-                      'Y_train':'data/Y_train_m.npy', 'Y_valid':'data/Y_valid_m.npy', 'Y_test':'data/Y_test_m.npy'}
+        files_path = {'X_train':folder+'X_train_m.npy', 'X_valid':folder+'X_valid_m.npy', 'X_test':folder+'X_test_m.npy',
+                      'Y_train':folder+'Y_train_m.npy', 'Y_valid':folder+'Y_valid_m.npy', 'Y_test':folder+'Y_test_m.npy'}
     else:
-        files_path = {'X_train':'data/X_train.npy', 'X_valid':'data/X_valid.npy', 'X_test':'data/X_test.npy',
-                      'Y_train':'data/Y_train.npy', 'Y_valid':'data/Y_valid.npy', 'Y_test':'data/Y_test.npy'}
+        files_path = {'X_train':folder+'X_train.npy', 'X_valid':folder+'X_valid.npy', 'X_test':folder+'X_test.npy',
+                      'Y_train':folder+'Y_train.npy', 'Y_valid':folder+'Y_valid.npy', 'Y_test':folder+'Y_test.npy'}
+
+    # register temperature minimu and maximum
+    temperature_limits = []
+    temperature_limits.append(weatherData['temperature'].min())
+    temperature_limits.append(weatherData['temperature'].max())
+
     if load_prepared_arrays:
         prepared_data = load_numpy_arrays (files_path=files_path, validation_mode=segmentation['validation_mode'])
     else:
         weatherData['time'] = pd.to_datetime(weatherData['time'].str[:19]) # Format time column
         weather_df_norm = normalize(weatherData) # Normalize
-        prepared_data = prepare_data(weather_df=weather_df_norm, segmentation=segmentation, save_data=True, files_path=files_path) # Segment and split data
+        prepared_data = prepare_data(weather_df=weather_df_norm, weather_data_limits=weather_data_limits, segmentation=segmentation, save_data=True, files_path=files_path) # Segment and split data
 
 
     #Step 5: Prepare/Train and execute prediction
 
-    train_test_model (prepared_data, prediction_method, compare, segmentation, n_steps, l_rate, plot_results)
+    train_test_model (prepared_data, temperature_limits, prediction_method, compare, segmentation, n_steps, l_rate, plot_results)
 
 
 def normalize(df):
@@ -73,7 +83,7 @@ def normalize(df):
     return df_norm
 
 
-def prepare_data(weather_df, segmentation, save_data, files_path):
+def prepare_data(weather_df, weather_data_limits, segmentation, save_data, files_path):
     """ Splits dataset and segments time series.
     """
     print("\n\nSPLITTING AND SEGMENTING DATA -----------------------------------------------------")
@@ -83,7 +93,7 @@ def prepare_data(weather_df, segmentation, save_data, files_path):
     ts_size = len(weather_df)
 
     # Segment time series
-    data = weather_df.loc[:][['temperature','pressure','humidity']]
+    data = weather_df.loc[weather_data_limits[0]:weather_data_limits[1]][['temperature','pressure','humidity']]
     X_data, Y_data = [], []
     remain_size = ts_size
     while remain_size >= segment_size:
@@ -182,15 +192,16 @@ def linear_regression(data, segmentation, print_coef=False):
     Y_pred = lreg.predict(X_test)
 
     # Coefficients
-    if print_coef: print("Coefficients: ", lreg.coef_)
+    coefficients = lreg.coef_
+    if print_coef: print("Coefficients: ", coefficients)
     # MSE
     mse = mean_squared_error(Y_test, Y_pred)
     print("Mean squared error: %.8f" % mse)
 
-    return mse
+    return mse, Y_pred, coefficients
 
 
-def rnn (data, n_steps, segmentation, l_rate, arquitecture='rnn', print_train=False):
+def rnn (data, pred_linear, temperature_limits, n_steps, segmentation, l_rate, arquitecture='rnn', print_train=False):
     """ Implementation of the following recurrent neural network (RNN) architectures:
             - Basic RNN
             - Gated recurrent unit (GRU) RNN
@@ -204,6 +215,8 @@ def rnn (data, n_steps, segmentation, l_rate, arquitecture='rnn', print_train=Fa
 
     train_loss = []
     test_loss = []
+
+    temperature_min, temperature_max = temperature_limits
 
     if arquitecture=='rnn' or arquitecture=='gru':
         print("\n\n"+arquitecture.upper()+" -----------------------------------------------------\n")
@@ -304,29 +317,52 @@ def rnn (data, n_steps, segmentation, l_rate, arquitecture='rnn', print_train=Fa
             loss = criterion(pred, Y_test)
             test_loss.append(loss.item())
             print("\nTest loss: %.8f" % loss.item())
+            denorm_pred = np.array(pred.squeeze(1)) * (temperature_max - temperature_min) + temperature_min
+            denorm_pred_limear = pred_linear.transpose()[0] * (temperature_max - temperature_min) + temperature_min
+            denorm_Y_test = np.array(Y_test.squeeze(1)) * (temperature_max - temperature_min) + temperature_min
+            plot_prediction(denorm_pred, denorm_pred_limear, denorm_Y_test, temperature_max, arquitecture, i)
+
 
     return train_loss, test_loss
 
 
-def train_test_model (data, prediction_method, compare, segmentation, n_steps, l_rate, plot_results):
+def train_test_model (data, temperature_limits, prediction_method, compare, segmentation, n_steps, l_rate, plot_results):
 
     prediction_results = []
 
     if compare['basic']: error_basic = basic_assumption(data, segmentation=segmentation)
 
-    if compare['linear']: error_linear = linear_regression(data, segmentation=segmentation)
+    if compare['linear']: error_linear, pred_linear, _ = linear_regression(data, segmentation=segmentation)
 
     if prediction_method == 'rnn':
-        train_loss, test_loss = rnn(data, segmentation=segmentation, n_steps=n_steps, l_rate=l_rate, arquitecture='rnn')
+        train_loss, test_loss = rnn(data, pred_linear, temperature_limits, segmentation=segmentation, n_steps=n_steps, l_rate=l_rate, arquitecture='rnn')
     elif prediction_method == 'lstm':
-        train_loss, test_loss = rnn(data, segmentation=segmentation, n_steps=n_steps, l_rate=l_rate, arquitecture='lstm')
+        train_loss, test_loss = rnn(data, pred_linear, temperature_limits, segmentation=segmentation, n_steps=n_steps, l_rate=l_rate, arquitecture='lstm')
     elif prediction_method == 'gru':
-        train_loss, test_loss = rnn(data, segmentation=segmentation, n_steps=n_steps, l_rate=l_rate, arquitecture='gru')
+        train_loss, test_loss = rnn(data, pred_linear, temperature_limits, segmentation=segmentation, n_steps=n_steps, l_rate=l_rate, arquitecture='gru')
     else:
         print("Set one of the following methods for prediction: basic, linear, rnn, lstm, gru")
 
     prediction_results = error_basic, error_linear, train_loss, test_loss
     if plot_results: plot_graph(prediction_results, prediction_method, n_steps)
+
+
+def plot_prediction(pred, pred_linear, Y_test, y_limit, prediction_method, step):
+    # draw the result
+    plt.figure(figsize=(20,4))
+    plt.title('Time Series Prediction - Step '+str(step), fontsize=14)
+    plt.xlabel('hours', fontsize=8)
+    plt.ylabel('temperature (°C)', fontsize=8)
+    plt.xticks(fontsize=8)
+    plt.yticks(fontsize=8)
+    plt.xlim(0, pred.size+1)
+    plt.ylim(0, y_limit)
+    plt.plot(np.arange(pred.size), pred, color='r', alpha=0.75, linewidth = 0.3, label=prediction_method.upper())
+    plt.plot(np.arange(pred_linear.size), pred_linear, color='g', alpha=0.75, linewidth = 0.3, label='Linear regression')
+    plt.plot(np.arange(Y_test.size), Y_test, color='k', alpha=0.25, linewidth = 2.0, label='Target data')
+    plt.legend(loc='upper left')
+    plt.savefig('predict_step_%d.png'%step, dpi=300)
+    plt.close()
 
 
 def plot_graph(prediction_results, prediction_method, n_steps):
@@ -361,3 +397,4 @@ def plot_graph(prediction_results, prediction_method, n_steps):
 
 if __name__=='__main__':
     main()
+
