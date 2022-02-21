@@ -22,7 +22,7 @@ def main():
 
     #Step 2: Define parameters
 
-    segmentation = {'multivariate':False, 'split':0.8, 'validation_mode':False, 'segment_size':10, 'shuffle_data':False, 'overlap':0.5}
+    segmentation = {'multivariate':False, 'split':0.8, 'validation_mode':False, 'segment_size':10, 'shuffle_data':False, 'overlap':0.0}
     compare = {'basic':True, 'linear':True} # Set comparison method/s
     weather_data_limits = (0,len(weatherData)) # for entire dataset, define (0,len(weatherData))
     plot_results = True
