@@ -22,11 +22,12 @@ def main():
 
     #Step 2: Define parameters
 
-    segmentation = {'multivariate':False, 'split':0.8, 'validation_mode':False, 'segment_size':10, 'shuffle_data':True, 'overlap':0.0}
+    segmentation = {'multivariate':False, 'split':0.8, 'validation_mode':False, 'segment_size':10, 'shuffle_data':False, 'overlap':0.5}
     compare = {'basic':True, 'linear':True} # Set comparison method/s
     weather_data_limits = (0,len(weatherData)) # for entire dataset, define (0,len(weatherData))
     plot_results = True
-    load_prepared_arrays = True
+    load_prepared_arrays = False
+    save_data = False
 
     # Neural network training params:
     prediction_method = "rnn" # options: rnn, lstm, gru
@@ -63,12 +64,16 @@ def main():
     else:
         weatherData['time'] = pd.to_datetime(weatherData['time'].str[:19]) # Format time column
         weather_df_norm = normalize(weatherData) # Normalize
-        prepared_data = prepare_data(weather_df=weather_df_norm, weather_data_limits=weather_data_limits, segmentation=segmentation, save_data=True, files_path=files_path) # Segment and split data
+        prepared_data = prepare_data(weather_df=weather_df_norm, weather_data_limits=weather_data_limits, segmentation=segmentation, save_data=save_data, files_path=files_path) # Segment and split data
 
 
     #Step 5: Prepare/Train and execute prediction
 
-    train_test_model (prepared_data, temperature_limits, prediction_method, compare, segmentation, n_steps, l_rate, plot_results)
+    if segmentation['overlap'] > 0.0:
+        hour_factor = segmentation['segment_size'] * segmentation['overlap']
+    else:
+        hour_factor = 1.0
+    train_test_model (prepared_data, temperature_limits, prediction_method, compare, segmentation, hour_factor, n_steps, l_rate, plot_results)
 
 
 def normalize(df):
@@ -114,7 +119,7 @@ def prepare_data(weather_df, weather_data_limits, segmentation, save_data, files
     # Shuffle arrays in unison
     if shuffle_data:
         if overlap > 0.0: print("\n\x1b[93mWarning: Since data is being shuffled, overlap should be 0.0. \nOtherwise overlapping segments may appear in different splits of the data.\033[0;0m\n")
-        assert len(X_data) == len(Y_data) ,"Arrays' length does not match."
+        assert len(X_data) == len(Y_data) ,"Array lengths don't match."
         p = np.random.permutation(len(X_data))
         X_data, Y_data = X_data[p], Y_data[p]
 
@@ -201,7 +206,7 @@ def linear_regression(data, segmentation, print_coef=False):
     return mse, Y_pred, coefficients
 
 
-def rnn (data, pred_linear, temperature_limits, n_steps, segmentation, l_rate, arquitecture='rnn', print_train=False):
+def rnn (data, pred_linear, temperature_limits, n_steps, segmentation, hour_factor, l_rate, arquitecture='rnn', print_train=False):
     """ Implementation of the following recurrent neural network (RNN) architectures:
             - Basic RNN
             - Gated recurrent unit (GRU) RNN
@@ -320,13 +325,13 @@ def rnn (data, pred_linear, temperature_limits, n_steps, segmentation, l_rate, a
             denorm_pred = np.array(pred.squeeze(1)) * (temperature_max - temperature_min) + temperature_min
             denorm_pred_limear = pred_linear.transpose()[0] * (temperature_max - temperature_min) + temperature_min
             denorm_Y_test = np.array(Y_test.squeeze(1)) * (temperature_max - temperature_min) + temperature_min
-            plot_prediction(denorm_pred, denorm_pred_limear, denorm_Y_test, temperature_max, arquitecture, i)
+            plot_prediction(denorm_pred, denorm_pred_limear, denorm_Y_test, temperature_max, hour_factor, arquitecture, i)
 
 
     return train_loss, test_loss
 
 
-def train_test_model (data, temperature_limits, prediction_method, compare, segmentation, n_steps, l_rate, plot_results):
+def train_test_model (data, temperature_limits, prediction_method, compare, segmentation, hour_factor, n_steps, l_rate, plot_results):
 
     prediction_results = []
 
@@ -335,11 +340,11 @@ def train_test_model (data, temperature_limits, prediction_method, compare, segm
     if compare['linear']: error_linear, pred_linear, _ = linear_regression(data, segmentation=segmentation)
 
     if prediction_method == 'rnn':
-        train_loss, test_loss = rnn(data, pred_linear, temperature_limits, segmentation=segmentation, n_steps=n_steps, l_rate=l_rate, arquitecture='rnn')
+        train_loss, test_loss = rnn(data, pred_linear, temperature_limits, segmentation=segmentation, hour_factor=hour_factor, n_steps=n_steps, l_rate=l_rate, arquitecture='rnn')
     elif prediction_method == 'lstm':
-        train_loss, test_loss = rnn(data, pred_linear, temperature_limits, segmentation=segmentation, n_steps=n_steps, l_rate=l_rate, arquitecture='lstm')
+        train_loss, test_loss = rnn(data, pred_linear, temperature_limits, segmentation=segmentation, hour_factor=hour_factor, n_steps=n_steps, l_rate=l_rate, arquitecture='lstm')
     elif prediction_method == 'gru':
-        train_loss, test_loss = rnn(data, pred_linear, temperature_limits, segmentation=segmentation, n_steps=n_steps, l_rate=l_rate, arquitecture='gru')
+        train_loss, test_loss = rnn(data, pred_linear, temperature_limits, segmentation=segmentation, hour_factor=hour_factor, n_steps=n_steps, l_rate=l_rate, arquitecture='gru')
     else:
         print("Set one of the following methods for prediction: basic, linear, rnn, lstm, gru")
 
@@ -347,7 +352,7 @@ def train_test_model (data, temperature_limits, prediction_method, compare, segm
     if plot_results: plot_graph(prediction_results, prediction_method, n_steps)
 
 
-def plot_prediction(pred, pred_linear, Y_test, y_limit, prediction_method, step):
+def plot_prediction(pred, pred_linear, Y_test, y_limit, hour_factor, prediction_method, step):
     # draw the result
     plt.figure(figsize=(20,4))
     plt.title('Time Series Prediction - Step '+str(step), fontsize=14)
@@ -355,11 +360,13 @@ def plot_prediction(pred, pred_linear, Y_test, y_limit, prediction_method, step)
     plt.ylabel('temperature (°C)', fontsize=8)
     plt.xticks(fontsize=8)
     plt.yticks(fontsize=8)
-    plt.xlim(0, pred.size+1)
+    plt.xlim(0, pred.size*hour_factor)
     plt.ylim(0, y_limit)
-    plt.plot(np.arange(pred.size), pred, color='r', alpha=0.75, linewidth = 0.3, label=prediction_method.upper())
-    plt.plot(np.arange(pred_linear.size), pred_linear, color='g', alpha=0.75, linewidth = 0.3, label='Linear regression')
-    plt.plot(np.arange(Y_test.size), Y_test, color='k', alpha=0.25, linewidth = 2.0, label='Target data')
+    assert pred.size == pred_linear.size == Y_test.size ,"Array lengths for x axis don't match."
+    x_ticks = np.arange(pred.size)*hour_factor
+    plt.plot(x_ticks, pred, color='r', alpha=0.75, linewidth = 0.3, label=prediction_method.upper())
+    plt.plot(x_ticks, pred_linear, color='g', alpha=0.75, linewidth = 0.3, label='Linear regression')
+    plt.plot(x_ticks, Y_test, color='k', alpha=0.25, linewidth = 2.0, label='Target data')
     plt.legend(loc='upper left')
     plt.savefig('predict_step_%d.png'%step, dpi=300)
     plt.close()
