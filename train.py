@@ -146,6 +146,8 @@ def prepare_data(weather_df, weather_data_limits, segmentation, save_data, files
 
 
 def load_numpy_arrays (files_path, validation_mode):
+    """ Loads previously saved numpy arrays containing segmented data
+    """
     print("\n\nLOADING DATA -----------------------------------------------------")
     if validation_mode:
         X_train = np.load(files_path['X_train'])
@@ -183,7 +185,7 @@ def basic_assumption(data, segmentation):
 
 
 def linear_regression(data, segmentation, print_coef=False):
-    """ Least squares Linear Regression.
+    """ Least squares Linear Regression
     """
     X_train, X_test, Y_train, Y_test = data
     if segmentation['multivariate']:
@@ -206,7 +208,7 @@ def linear_regression(data, segmentation, print_coef=False):
     return mse, Y_pred, coefficients
 
 
-def rnn (data, pred_linear, temperature_limits, n_steps, segmentation, hour_factor, l_rate, arquitecture='rnn', print_train=False):
+def rnn(data, pred_linear, temperature_limits, n_steps, segmentation, hour_factor, l_rate, arquitecture='rnn', print_train=False):
     """ Implementation of the following recurrent neural network (RNN) architectures:
             - Basic RNN
             - Gated recurrent unit (GRU) RNN
@@ -327,12 +329,12 @@ def rnn (data, pred_linear, temperature_limits, n_steps, segmentation, hour_fact
             denorm_Y_test = np.array(Y_test.squeeze(1)) * (temperature_max - temperature_min) + temperature_min
             plot_prediction(denorm_pred, denorm_pred_limear, denorm_Y_test, temperature_max, hour_factor, arquitecture, i)
 
-
     return train_loss, test_loss
 
 
-def train_test_model (data, temperature_limits, prediction_method, compare, segmentation, hour_factor, n_steps, l_rate, plot_results):
-
+def train_test_model(data, temperature_limits, prediction_method, compare, segmentation, hour_factor, n_steps, l_rate, plot_results):
+    """ Execute models training and plot results
+    """
     prediction_results = []
 
     if compare['basic']: error_basic = basic_assumption(data, segmentation=segmentation)
@@ -346,14 +348,15 @@ def train_test_model (data, temperature_limits, prediction_method, compare, segm
     elif prediction_method == 'gru':
         train_loss, test_loss = rnn(data, pred_linear, temperature_limits, segmentation=segmentation, hour_factor=hour_factor, n_steps=n_steps, l_rate=l_rate, arquitecture='gru')
     else:
-        print("Set one of the following methods for prediction: basic, linear, rnn, lstm, gru")
+        print("Set one of the following methods for prediction: rnn, lstm, gru")
 
     prediction_results = error_basic, error_linear, train_loss, test_loss
     if plot_results: plot_graph(prediction_results, prediction_method, n_steps)
 
 
 def plot_prediction(pred, pred_linear, Y_test, y_limit, hour_factor, prediction_method, step):
-    # draw the result
+    """ Plot RNN temperature prediction compared to linear regression and target data
+    """
     plt.figure(figsize=(20,4))
     plt.title('Time Series Prediction - Step '+str(step), fontsize=14)
     plt.xlabel('hours', fontsize=8)
@@ -373,6 +376,8 @@ def plot_prediction(pred, pred_linear, Y_test, y_limit, hour_factor, prediction_
 
 
 def plot_graph(prediction_results, prediction_method, n_steps):
+    """ Plot RNN loss history
+    """
     error_basic, error_linear, train_loss, test_loss = prediction_results[0], prediction_results[1], prediction_results[2], prediction_results[3]
     test_loss_large = []
     x_axis = []
