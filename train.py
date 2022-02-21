@@ -72,7 +72,7 @@ def main():
     if segmentation['overlap'] > 0.0:
         hour_factor = segmentation['segment_size'] * segmentation['overlap']
     else:
-        hour_factor = 1.0
+        hour_factor = segmentation['segment_size']
     train_test_model (prepared_data, temperature_limits, prediction_method, compare, segmentation, hour_factor, n_steps, l_rate, plot_results)
 
 
