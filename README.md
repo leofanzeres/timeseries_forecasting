@@ -1,6 +1,6 @@
 # Timeseries Forecasting with RNNs
 
-An experiment of weather forecasting with three recurrent neural network (RNN) architectures: a basic RNN, a long short-term memory (LSTM) RNN and a gated recurrent units (GRU) RNN.
+A weather forecasting experiment using three recurrent neural network (RNN) architectures: a basic RNN, a long short-term memory (LSTM) RNN and a gated recurrent units (GRU) RNN.
 
 ![RNN prediction training step 0](prediction_plots/predict_step_0.png)
 ![RNN prediction training step 1](prediction_plots/predict_step_1.png)
